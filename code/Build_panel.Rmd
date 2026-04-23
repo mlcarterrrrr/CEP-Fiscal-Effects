@@ -18,6 +18,7 @@ library(tidyr)
 library(readr)
 library(pdftools)
 
+
 district_data <- read_csv("/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/data/raw/district_data.csv")
 f33_data <- read_csv("/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/data/raw/NCES_f33.csv")
 
@@ -190,7 +191,7 @@ district_CEP_panel_merged <- district_CEP_panel %>%
 
 write_csv(
   district_CEP_panel_merged,
-  "/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/data/processed/district_CEP_wizard.csv"
+  "/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/data/processed/OR_CEP_clean.csv"
 )
 
 ```

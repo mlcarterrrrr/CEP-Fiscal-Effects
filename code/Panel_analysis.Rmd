@@ -114,7 +114,6 @@ cep %>%
 
 ```
 
-
 ## Revenue, enrollment, poverty (MEPS)
 ```{r}
 ### unweighted by enrollment
@@ -207,7 +206,6 @@ cep %>%
   )
 
 ```
-
 
 # Baseline TWFE
 ## total rev
@@ -326,5 +324,235 @@ cep <- cep %>%
   ))
 
 ```
+
+
+# Callaway-Sant'anna DiD
+## Total revenue
+```{r}
+table(cep$first_treat_year_cs)
+### not yet treated districts.
+
+cs_model <- att_gt(
+  yname = "total_revenue_totalrev_per_pupil_v33_district_finance",
+  tname = "year",
+  idname = "district_id",
+  gname = "first_treat_year_cs",
+  data = cep,
+  panel = TRUE,
+  clustervars = "district_id"
+)
+
+summary(cs_model)
+
+# Overall average ATT
+cs_overall <- aggte(
+  cs_model,
+  type = "simple"
+)
+
+summary(cs_overall)
+
+# Dynamic / event-study ATT
+cs_dynamic <- aggte(
+  cs_model,
+  type = "dynamic"
+)
+
+summary(cs_dynamic)
+ggdid(cs_dynamic)
+
+
+# export
+
+cs_dynamic_df <- tibble(
+  event_time = cs_dynamic$egt,
+  att = cs_dynamic$att.egt,
+  se = cs_dynamic$se.egt
+) %>%
+  mutate(
+    ci_low = att - 1.96 * se,
+    ci_high = att + 1.96 * se
+  )
+
+write_csv(
+  cs_dynamic_df,
+  "/Users/marisalenaycarter/Desktop/Oregon_Meals/cs_dynamic_effects_totalrev.csv"
+)
+
+```
+
+## Total revenue, weighted by enrollment
+```{r}
+cep <- cep %>%
+  filter(year <= 2020)
+
+names(cep)
+
+t_model <- att_gt(
+  yname = "total_revenue_totalrev_per_pupil_v33_district_finance",
+  tname = "year",
+  idname = "district_id",
+  gname = "first_treat_year_cs",
+  data = cep,
+  panel = TRUE,
+  clustervars = "district_id",
+  weightsname = "total_students_all_grades_excludes_ae_district"
+)
+
+summary(t_model)
+
+# Overall average ATT
+t_overall <- aggte(
+  t_model,
+  type = "simple"
+)
+
+summary(t_overall)
+
+# Dynamic / event-study ATT (truncated window)
+t_dynamic <- aggte(
+  t_model,
+  type = "dynamic",
+  min_e = -4,
+  max_e = 5
+)
+
+summary(t_dynamic)
+ggdid(t_dynamic)
+
+# export
+t_dynamic_df <- tibble(
+  event_time = t_dynamic$egt,
+  att = t_dynamic$att.egt,
+  se = t_dynamic$se.egt
+) %>%
+  mutate(
+    ci_low = att - 1.96 * se,
+    ci_high = att + 1.96 * se
+  )
+
+write_csv(
+  t_dynamic_df,
+  "/Users/marisalenaycarter/Desktop/Oregon_Meals/cs_dynamic_effects_totalrev.csv"
+)
+
+summary(t_overall)
+```
+
+## Federal revenue weighted by enrollment
+```{r}
+cep <- cep %>%
+  filter(year <= 2020)
+
+names(cep)
+
+f_model <- att_gt(
+  yname = "total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance",
+  tname = "year",
+  idname = "district_id",
+  gname = "first_treat_year_cs",
+  data = cep,
+  panel = TRUE,
+  clustervars = "district_id",
+  weightsname = "total_students_all_grades_excludes_ae_district"
+)
+
+summary(f_model)
+
+# Overall average ATT
+f_overall <- aggte(
+  f_model,
+  type = "simple"
+)
+
+summary(f_overall)
+
+# Dynamic / event-study ATT (truncated window)
+f_dynamic <- aggte(
+  f_model,
+  type = "dynamic",
+  min_e = -4,
+  max_e = 4
+)
+
+summary(f_dynamic)
+ggdid(f_dynamic)
+
+# export
+f_dynamic_df <- tibble(
+  event_time = f_dynamic$egt,
+  att = f_dynamic$att.egt,
+  se = f_dynamic$se.egt
+) %>%
+  mutate(
+    ci_low = att - 1.96 * se,
+    ci_high = att + 1.96 * se
+  )
+
+write_csv(
+  f_dynamic_df,
+  "/Users/marisalenaycarter/Desktop/Oregon_Meals/cs_dynamic_effects_federalrev.csv"
+)
+
+summary(f_overall)
+```
+
+### State revenue weighted by enrollment
+```{r}
+cep <- cep %>%
+  filter(year <= 2020)
+
+names(cep)
+s_model <- att_gt(
+  yname = "total_revenue_state_sources_tstrev_per_pupil_v33_district_finance",
+  tname = "year",
+  idname = "district_id",
+  gname = "first_treat_year_cs",
+  data = cep,
+  panel = TRUE,
+  clustervars = "district_id",
+  weightsname = "total_students_all_grades_excludes_ae_district"
+)
+
+summary(s_model)
+
+# Overall average ATT
+s_overall <- aggte(
+  s_model,
+  type = "simple"
+)
+
+summary(s_overall)
+
+# Dynamic / event-study ATT (truncated window)
+s_dynamic <- aggte(
+  s_model,
+  type = "dynamic",
+  min_e = -4,
+  max_e = 5
+)
+
+summary(s_dynamic)
+ggdid(s_dynamic)
+
+# export
+s_dynamic_df <- tibble(
+  event_time = s_dynamic$egt,
+  att = s_dynamic$att.egt,
+  se = s_dynamic$se.egt
+) %>%
+  mutate(
+    ci_low = att - 1.96 * se,
+    ci_high = att + 1.96 * se
+  )
+
+write_csv(
+  s_dynamic_df,
+  "/Users/marisalenaycarter/Desktop/Oregon_Meals/cs_dynamic_effects_staterev.csv"
+) 
+
+summary(s_overall)
+```
+
 
 

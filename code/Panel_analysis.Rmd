@@ -29,7 +29,7 @@ cep <- read_csv(
 ) %>%
   group_by(agency_name) %>%
   filter(
-    all(total_students_all_grades_excludes_ae_district >= 50, na.rm = TRUE)
+    all(total_students >= 50, na.rm = TRUE)
   ) %>%
   ungroup() %>%
   mutate(
@@ -49,7 +49,7 @@ cep <- read_csv(
 
 ```
 
-
+# Check that panel is set up correctly
 ```{r}
 cep_check <- cep %>%
   select(
@@ -119,20 +119,20 @@ cep %>%
 ### unweighted by enrollment
 cep %>%
   summarise(
-    mean_total_rev = mean(total_revenue_totalrev_per_pupil_v33_district_finance, na.rm = TRUE),
-    sd_total_rev = sd(total_revenue_totalrev_per_pupil_v33_district_finance, na.rm = TRUE)
+    mean_total_rev = mean(total_rev, na.rm = TRUE),
+    sd_total_rev = sd(total_rev_per_pupil, na.rm = TRUE)
   )
 cep %>%
   summarise(
-    mean_federal = mean(total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance, na.rm = TRUE),
-    mean_state = mean(total_revenue_state_sources_tstrev_per_pupil_v33_district_finance, na.rm = TRUE),
-    mean_local = mean(total_revenue_local_sources_tlocrev_per_pupil_v33_district_finance, na.rm = TRUE)
+    mean_federal = mean(total_rev_fed, na.rm = TRUE),
+    mean_state = mean(total_rev_state, na.rm = TRUE),
+    mean_local = mean(total_rev_local, na.rm = TRUE)
   )
 
 cep %>%
   summarise(
-    mean_enrollment = mean(total_students_all_grades_excludes_ae_district, na.rm = TRUE),
-    median_enrollment = median(total_students_all_grades_excludes_ae_district, na.rm = TRUE)
+    mean_enrollment = mean(total_students, na.rm = TRUE),
+    median_enrollment = median(total_students, na.rm = TRUE)
   )
 ```
 
@@ -140,14 +140,14 @@ cep %>%
 ```{r}
 cep <- cep %>%
   mutate(
-    federal_share = total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance /
-      total_revenue_totalrev_per_pupil_v33_district_finance,
+    federal_share = total_rev_fed /
+      total_rev_per_pupil,
 
-    state_share = total_revenue_state_sources_tstrev_per_pupil_v33_district_finance /
-      total_revenue_totalrev_per_pupil_v33_district_finance,
+    state_share = total_rev_state /
+      total_rev_per_pupil,
 
-    local_share = total_revenue_local_sources_tlocrev_per_pupil_v33_district_finance /
-      total_revenue_totalrev_per_pupil_v33_district_finance
+    local_share = total_rev_local /
+      total_rev_per_pupil
   )
 
 cep %>%
@@ -211,7 +211,7 @@ cep %>%
 ## total rev
 ```{r}
 model_total_twfe <- feols(
-  total_revenue_totalrev_per_pupil_v33_district_finance ~ treated |
+  total_rev_per_pupil ~ treated |
     agency_name + year,
   cluster = ~agency_name,
   data = cep
@@ -224,21 +224,21 @@ summary(model_total_twfe)
 ```{r}
 
 model_federal_twfe <- feols(
-  total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance ~ treated |
+  total_rev_fed ~ treated |
     agency_name + year,
   cluster = ~agency_name,
   data = cep
 )
 
 model_state_twfe <- feols(
-  total_revenue_state_sources_tstrev_per_pupil_v33_district_finance ~ treated |
+  total_rev_state ~ treated |
     agency_name + year,
   cluster = ~agency_name,
   data = cep
 )
 
 model_local_twfe <- feols(
-  total_revenue_local_sources_tlocrev_per_pupil_v33_district_finance ~ treated |
+  total_rev_local ~ treated |
     agency_name + year,
   cluster = ~agency_name,
   data = cep
@@ -252,7 +252,7 @@ summary(model_local_twfe)
 # TWFE event study
 ```{r}
 model_event_twfe <- feols(
-  total_revenue_totalrev_per_pupil_v33_district_finance ~
+  total_rev_per_pupil ~
     i(event_time, ref = -1) |
     agency_name + year,
   cluster = ~agency_name,
@@ -263,7 +263,7 @@ summary(model_event_twfe)
 iplot(model_event_twfe)
 
 model_total_twfe_controls <- feols(
-  total_revenue_totalrev_per_pupil_v33_district_finance ~
+  total_rev_per_pupil ~
     treated + share_child_poverty |
     agency_name + year,
   cluster = ~agency_name,
@@ -276,7 +276,7 @@ summary(model_total_twfe_controls)
 # federal, state, local rev
 ```{r}
 model_event_federal <- feols(
-  total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance ~
+  total_rev_fed ~
     i(event_time, ref = -1) |
     agency_name + year,
   cluster = ~agency_name,
@@ -288,7 +288,7 @@ iplot(model_event_federal)
 
 
 model_event_state <- feols(
-  total_revenue_state_sources_tstrev_per_pupil_v33_district_finance ~
+  total_rev_state ~
     i(event_time, ref = -1) |
     agency_name + year,
   cluster = ~agency_name,
@@ -300,7 +300,7 @@ iplot(model_event_state)
 
 
 model_event_local <- feols(
-  total_revenue_local_sources_tlocrev_per_pupil_v33_district_finance ~
+  total_rev_local ~
     i(event_time, ref = -1) |
     agency_name + year,
   cluster = ~agency_name,
@@ -333,7 +333,7 @@ table(cep$first_treat_year_cs)
 ### not yet treated districts.
 
 cs_model <- att_gt(
-  yname = "total_revenue_totalrev_per_pupil_v33_district_finance",
+  yname = "total_rev_per_pupil",
   tname = "year",
   idname = "district_id",
   gname = "first_treat_year_cs",
@@ -376,8 +376,9 @@ cs_dynamic_df <- tibble(
 
 write_csv(
   cs_dynamic_df,
-  "/Users/marisalenaycarter/Desktop/Oregon_Meals/cs_dynamic_effects_totalrev.csv"
+ "/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/output/cs_dynamic_effects_totalrev_unweighted.csv"
 )
+
 
 ```
 
@@ -389,14 +390,14 @@ cep <- cep %>%
 names(cep)
 
 t_model <- att_gt(
-  yname = "total_revenue_totalrev_per_pupil_v33_district_finance",
+  yname = "total_rev_per_pupil",
   tname = "year",
   idname = "district_id",
   gname = "first_treat_year_cs",
   data = cep,
   panel = TRUE,
   clustervars = "district_id",
-  weightsname = "total_students_all_grades_excludes_ae_district"
+  weightsname = "total_students"
 )
 
 summary(t_model)
@@ -433,7 +434,7 @@ t_dynamic_df <- tibble(
 
 write_csv(
   t_dynamic_df,
-  "/Users/marisalenaycarter/Desktop/Oregon_Meals/cs_dynamic_effects_totalrev.csv"
+ "/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/output/cs_dynamic_effects_totalrev.csv"
 )
 
 summary(t_overall)
@@ -447,14 +448,14 @@ cep <- cep %>%
 names(cep)
 
 f_model <- att_gt(
-  yname = "total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance",
+  yname = "total_rev_fed",
   tname = "year",
   idname = "district_id",
   gname = "first_treat_year_cs",
   data = cep,
   panel = TRUE,
   clustervars = "district_id",
-  weightsname = "total_students_all_grades_excludes_ae_district"
+  weightsname = "total_students"
 )
 
 summary(f_model)
@@ -491,7 +492,7 @@ f_dynamic_df <- tibble(
 
 write_csv(
   f_dynamic_df,
-  "/Users/marisalenaycarter/Desktop/Oregon_Meals/cs_dynamic_effects_federalrev.csv"
+  "/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/output/cs_dynamic_effects_federalrev.csv"
 )
 
 summary(f_overall)
@@ -504,14 +505,14 @@ cep <- cep %>%
 
 names(cep)
 s_model <- att_gt(
-  yname = "total_revenue_state_sources_tstrev_per_pupil_v33_district_finance",
+  yname = "total_rev_state",
   tname = "year",
   idname = "district_id",
   gname = "first_treat_year_cs",
   data = cep,
   panel = TRUE,
   clustervars = "district_id",
-  weightsname = "total_students_all_grades_excludes_ae_district"
+  weightsname = "total_students"
 )
 
 summary(s_model)
@@ -548,7 +549,7 @@ s_dynamic_df <- tibble(
 
 write_csv(
   s_dynamic_df,
-  "/Users/marisalenaycarter/Desktop/Oregon_Meals/cs_dynamic_effects_staterev.csv"
+ "/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/output/cs_dynamic_effects_staterev.csv"
 ) 
 
 summary(s_overall)
@@ -559,7 +560,7 @@ summary(s_overall)
 ## Total revenue
 ```{r}
 model_sunab <- feols(
-  total_revenue_totalrev_per_pupil_v33_district_finance ~
+  total_rev_per_pupil ~
     sunab(first_treat_year, year) |
     agency_name + year,
   cluster = ~agency_name,
@@ -579,7 +580,7 @@ sort(unique(cep$first_treat_year))
 ## Federal revenue
 ```{r}
 model_federal_sunab <- feols(
-  total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance ~
+  total_rev_fed ~
     sunab(first_treat_year, year) |
     agency_name + year,
   cluster = ~agency_name,
@@ -592,7 +593,7 @@ iplot(model_federal_sunab, xlim = c(-5,5))
 ## State revenue
 ```{r}
 model_state_sunab <- feols(
-  total_revenue_state_sources_tstrev_per_pupil_v33_district_finance ~
+  total_rev_state ~
     sunab(first_treat_year, year) |
     agency_name + year,
   cluster = ~agency_name,
@@ -612,10 +613,10 @@ cep_bacon <- cep %>%
     agency_name,
     year,
     treated,
-    total_revenue_totalrev_per_pupil_v33_district_finance
+    total_rev_per_pupil
   ) %>%
   filter(
-    !is.na(total_revenue_totalrev_per_pupil_v33_district_finance),
+    !is.na(total_rev_per_pupil),
     !is.na(treated),
     !is.na(year),
     !is.na(agency_name)
@@ -630,7 +631,7 @@ cep_bacon <- cep_bacon %>%
   filter(agency_name %in% balanced_ids)
 
 bacon_results <- bacon(
-  total_revenue_totalrev_per_pupil_v33_district_finance ~ treated,
+  total_rev_per_pupil ~ treated,
   data = cep_bacon,
   id_var = "agency_name",
   time_var = "year"

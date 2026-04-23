@@ -85,6 +85,8 @@ f33_panel <- f33_long %>%
     values_from = value
   )
 
+# These agencies do not function like normal school districts. 
+
 remove_agencies <- c(
   "CLACKAMAS ESD",
   "COLUMBIA GORGE ESD",

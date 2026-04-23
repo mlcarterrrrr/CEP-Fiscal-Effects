@@ -604,4 +604,39 @@ iplot(model_state_sunab, xlim = c(-5,5))
 ```
 
 
+# Goodman-Bacon
+## Total Revenue
+```{r}
+cep_bacon <- cep %>%
+  select(
+    agency_name,
+    year,
+    treated,
+    total_revenue_totalrev_per_pupil_v33_district_finance
+  ) %>%
+  filter(
+    !is.na(total_revenue_totalrev_per_pupil_v33_district_finance),
+    !is.na(treated),
+    !is.na(year),
+    !is.na(agency_name)
+  )
+
+balanced_ids <- cep_bacon %>%
+  count(agency_name) %>%
+  filter(n == length(unique(cep_bacon$year))) %>%
+  pull(agency_name)
+
+cep_bacon <- cep_bacon %>%
+  filter(agency_name %in% balanced_ids)
+
+bacon_results <- bacon(
+  total_revenue_totalrev_per_pupil_v33_district_finance ~ treated,
+  data = cep_bacon,
+  id_var = "agency_name",
+  time_var = "year"
+)
+
+bacon_results
+```
+
 

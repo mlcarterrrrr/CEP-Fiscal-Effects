@@ -1,0 +1,197 @@
+---
+title: "Build_panel"
+author: "Marisa Carter"
+date: "2026-04-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(fixest)
+library(did)
+library(bacondecomp)
+library(haven)
+library(dplyr)
+library(janitor)
+library(stringr)
+library(tidyr)
+library(readr)
+library(pdftools)
+
+district_data <- read_csv("/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/data/raw/district_data.csv")
+f33_data <- read_csv("/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/data/raw/NCES_f33.csv")
+
+colnames(f33_data)
+
+# turn f33 into a long dataset
+f33_data <- f33_data %>% clean_names()
+
+f33_subset <- f33_data %>%
+  select(
+    agency_name,
+    agency_id_nces_assigned_district_latest_available_year,
+    starts_with("total_students_all_grades_excludes_ae_district_"),
+    starts_with("total_revenue_totalrev_district_finance_"),
+    starts_with("total_revenue_local_sources_tlocrev_district_finance_"),
+    starts_with("total_revenue_state_sources_tstrev_district_finance_"),
+    starts_with("total_revenue_federal_sources_tfedrev_district_finance_"),
+    starts_with("total_revenue_totalrev_per_pupil"),
+    starts_with("total_revenue_local_sources_tlocrev_per_pupil"),
+    starts_with("total_revenue_state_sources_tstrev_per_pupil"),
+    starts_with("total_revenue_federal_sources_tfedrev_per_pupil"),
+    starts_with("total_students_all_grades_excludes_ae_district"),
+    starts_with("total_current_expenditures_instruction_tcurinst_district_finance")
+  ) %>%
+  mutate(
+    across(
+      -c(agency_name, agency_id_nces_assigned_district_latest_available_year),
+      ~ readr::parse_number(as.character(.))
+    )
+  )
+
+f33_long <- f33_subset %>%
+  pivot_longer(
+    cols = -c(
+      agency_name,
+      agency_id_nces_assigned_district_latest_available_year
+    ),
+    names_to = "name",
+    values_to = "value"
+  ) %>%
+  mutate(
+    start_year = str_extract(name, "20\\d{2}(?=_\\d{2}$)"),
+    end_suffix = str_extract(name, "(?<=20\\d{2}_)\\d{2}$"),
+    variable = str_remove(name, "_20\\d{2}_\\d{2}$")
+  ) %>%
+  mutate(
+    start_year = as.numeric(start_year),
+    end_year = as.numeric(paste0(substr(start_year, 1, 2), end_suffix)),
+    school_year = paste0(start_year, "-", end_year),
+    year = start_year
+  ) %>%
+  select(
+    agency_name,
+    agency_id_nces_assigned_district_latest_available_year,
+    school_year,
+    year,
+    variable,
+    value
+  )
+
+f33_panel <- f33_long %>%
+  pivot_wider(
+    names_from = variable,
+    values_from = value
+  )
+
+remove_agencies <- c(
+  "CLACKAMAS ESD",
+  "COLUMBIA GORGE ESD",
+  "DOUGLAS ESD",
+  "GRANT ESD",
+  "HARNEY ESD REGION XVII",
+  "HIGH DESERT ESD",
+  "INTERMOUNTAIN ESD",
+  "JEFFERSON ESD",
+  "LAKE ESD",
+  "LINN BENTON LINCOLN ESD",
+  "OREGON DEPARTMENT OF EDUCATION",
+  "LANE ESD",
+  "MALHEUR ESD REGION 14",
+  "NORTH CENTRAL ESD",
+  "NORTHWEST REGIONAL ESD",
+  "ODE HEAD START",
+  "REGION 18 ESD",
+  "SOUTH COAST ESD",
+  "SOUTHERN OREGON ESD",
+  "UNION-BAKER ESD",
+  "WILLAMETTE ESD"
+)
+
+f33_panel <- f33_panel %>%
+  filter(!agency_name %in% remove_agencies)
+
+### clean up district data
+district_panel <- district_data %>%
+  mutate(
+    school_year = paste0(year, "-", year + 1)
+  )
+
+district_CEP_panel <- f33_panel %>%
+  left_join(
+    district_panel %>%
+      select(
+        leaid,
+        school_year,
+        agency_type,
+        urban_centric_locale,
+        est_population_total,
+        est_population_5_17,
+        est_population_5_17_poverty
+      ),
+    by = c(
+      "agency_id_nces_assigned_district_latest_available_year" = "leaid",
+      "school_year" = "school_year"
+    )
+  ) %>%
+  mutate(
+    share_child_poverty =
+      est_population_5_17_poverty / est_population_5_17
+  )
+
+cep_panel <- read_csv(
+ "/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/data/raw/CEP_panel_combined.csv",
+  show_col_types = FALSE
+)
+
+district_CEP_panel_merged <- district_CEP_panel %>%
+  left_join(
+    cep_panel %>%
+      select(
+        LEANAME,
+        school_year,
+        CEP_treat,
+        All_Sites
+      ),
+    by = c(
+      "agency_name" = "LEANAME",
+      "school_year" = "school_year"
+    )
+  ) %>%
+  mutate(
+    CEP_treat = replace_na(CEP_treat, 0),
+    all_sites_year = if_else(
+      str_detect(str_to_upper(str_trim(All_Sites)), "A"),
+      1,
+      0,
+      missing = 0
+    )
+  ) %>%
+  group_by(agency_name) %>%
+  mutate(
+    first_treat_year = min(if_else(CEP_treat == 1, year, NA_real_), na.rm = TRUE),
+    first_treat_year = if_else(is.infinite(first_treat_year), NA_real_, first_treat_year),
+    all_sites_first = any(
+      year == first_treat_year & all_sites_year == 1,
+      na.rm = TRUE
+    ),
+    All_sites = if_else(
+      !is.na(first_treat_year) & all_sites_first,
+      1,
+      0
+    )
+  ) %>%
+  ungroup() %>%
+  select(
+    -All_Sites,
+    -all_sites_year,
+    -all_sites_first
+  )
+
+write_csv(
+  district_CEP_panel_merged,
+  "/Users/marisalenaycarter/Desktop/CEP-Fiscal-Effects/data/processed/district_CEP_wizard.csv"
+)
+
+```
+

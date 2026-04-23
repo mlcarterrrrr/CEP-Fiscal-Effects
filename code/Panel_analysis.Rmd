@@ -1,0 +1,330 @@
+---
+title: "Oregon CEP Participation"
+author: "Marisa Carter"
+date: "2026-02-15"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r}
+library(tidyverse)
+library(fixest)
+library(did)
+library(bacondecomp)
+library(haven)
+library(dplyr)
+library(tidyverse)
+library(janitor)
+library(stringr)
+library(tidyr)
+library(readr)
+library(pdftools)
+library(knitr)
+library(here)
+
+cep <- read_csv(
+  here("data", "processed", "OR_CEP_clean.csv"),
+  show_col_types = FALSE
+) %>%
+  group_by(agency_name) %>%
+  filter(
+    all(total_students_all_grades_excludes_ae_district >= 50, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    treated = if_else(
+      !is.na(first_treat_year) & year >= first_treat_year,
+      1,
+      0
+    ),
+    event_time = year - first_treat_year,
+    first_treat_year_cs = if_else(
+      is.na(first_treat_year),
+      0,
+      first_treat_year
+    ),
+    district_id = as.numeric(factor(agency_name))
+  )
+
+```
+
+
+```{r}
+cep_check <- cep %>%
+  select(
+    agency_name,
+    district_id,
+    school_year,
+    year,
+    first_treat_year,
+    first_treat_year_cs,
+    CEP_treat,
+    treated,
+    event_time
+  ) %>%
+  arrange(agency_name, year)
+
+View(cep_check)
+
+# Number of districts
+cep %>%
+  summarise(
+    n_districts = n_distinct(agency_name)
+  )
+
+# Cohort sizes
+cep %>%
+  distinct(agency_name, first_treat_year_cs) %>%
+  count(first_treat_year_cs)
+
+# Event-time support check
+cep %>%
+  filter(treated == 1) %>%
+  distinct(agency_name, event_time) %>%
+  count(event_time) %>%
+  arrange(event_time)
+```
+
+# Summary statistics
+```{r}
+## Number of districts, years, observations
+cep %>%
+  summarise(
+    districts = n_distinct(agency_name),
+    years = n_distinct(year),
+    observations = n()
+  )
+
+### CEP adoption over time
+cep %>%
+  distinct(agency_name, first_treat_year) %>%
+  mutate(adopt_year = ifelse(is.na(first_treat_year), "Never", first_treat_year)) %>%
+  count(adopt_year)
+
+### treatment rate by year
+
+cep %>%
+  group_by(year) %>%
+  summarise(
+    districts = n_distinct(agency_name),
+    treated = sum(treated),
+    share_treated = mean(treated)
+  )
+
+```
+
+
+## Revenue, enrollment, poverty (MEPS)
+```{r}
+### unweighted by enrollment
+cep %>%
+  summarise(
+    mean_total_rev = mean(total_revenue_totalrev_per_pupil_v33_district_finance, na.rm = TRUE),
+    sd_total_rev = sd(total_revenue_totalrev_per_pupil_v33_district_finance, na.rm = TRUE)
+  )
+cep %>%
+  summarise(
+    mean_federal = mean(total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance, na.rm = TRUE),
+    mean_state = mean(total_revenue_state_sources_tstrev_per_pupil_v33_district_finance, na.rm = TRUE),
+    mean_local = mean(total_revenue_local_sources_tlocrev_per_pupil_v33_district_finance, na.rm = TRUE)
+  )
+
+cep %>%
+  summarise(
+    mean_enrollment = mean(total_students_all_grades_excludes_ae_district, na.rm = TRUE),
+    median_enrollment = median(total_students_all_grades_excludes_ae_district, na.rm = TRUE)
+  )
+```
+
+## Revenue composition
+```{r}
+cep <- cep %>%
+  mutate(
+    federal_share = total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance /
+      total_revenue_totalrev_per_pupil_v33_district_finance,
+
+    state_share = total_revenue_state_sources_tstrev_per_pupil_v33_district_finance /
+      total_revenue_totalrev_per_pupil_v33_district_finance,
+
+    local_share = total_revenue_local_sources_tlocrev_per_pupil_v33_district_finance /
+      total_revenue_totalrev_per_pupil_v33_district_finance
+  )
+
+cep %>%
+  summarise(
+    mean_federal_share = mean(federal_share, na.rm = TRUE),
+    mean_state_share = mean(state_share, na.rm = TRUE),
+    mean_local_share = mean(local_share, na.rm = TRUE)
+  )
+
+### revenue over time
+cep %>%
+  group_by(year) %>%
+  summarise(
+    federal = mean(federal_share, na.rm = TRUE),
+    state = mean(state_share, na.rm = TRUE),
+    local = mean(local_share, na.rm = TRUE)
+  )
+
+cep %>%
+  group_by(year) %>%
+  summarise(
+    federal = mean(federal_share, na.rm = TRUE),
+    state = mean(state_share, na.rm = TRUE),
+    local = mean(local_share, na.rm = TRUE)
+  ) %>%
+  pivot_longer(-year, names_to = "source", values_to = "share") %>%
+  ggplot(aes(year, share, color = source)) +
+  geom_line(size = 1.2) +
+  geom_point() +
+  labs(
+    y = "Share of Revenue",
+    x = "Year",
+    title = "Revenue Composition of Oregon School District Funding"
+  ) +
+  theme_minimal()
+
+
+### revenue composition by CEP status
+cep %>%
+  group_by(treated) %>%
+  summarise(
+    federal_share = mean(federal_share, na.rm = TRUE),
+    state_share = mean(state_share, na.rm = TRUE),
+    local_share = mean(local_share, na.rm = TRUE)
+  )
+
+### pre-treatment revenue composition
+cep %>%
+  filter(year < first_treat_year | is.na(first_treat_year)) %>%
+  mutate(eventually_treated = if_else(is.na(first_treat_year), 0, 1)) %>%
+  group_by(eventually_treated) %>%
+  summarise(
+    federal_share = mean(federal_share, na.rm = TRUE),
+    state_share = mean(state_share, na.rm = TRUE),
+    local_share = mean(local_share, na.rm = TRUE)
+  )
+
+```
+
+
+# Baseline TWFE
+## total rev
+```{r}
+model_total_twfe <- feols(
+  total_revenue_totalrev_per_pupil_v33_district_finance ~ treated |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+summary(model_total_twfe)
+```
+
+## Federal, state, local revenue
+```{r}
+
+model_federal_twfe <- feols(
+  total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance ~ treated |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+model_state_twfe <- feols(
+  total_revenue_state_sources_tstrev_per_pupil_v33_district_finance ~ treated |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+model_local_twfe <- feols(
+  total_revenue_local_sources_tlocrev_per_pupil_v33_district_finance ~ treated |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+summary(model_federal_twfe)
+summary(model_state_twfe)
+summary(model_local_twfe)
+```
+
+# TWFE event study
+```{r}
+model_event_twfe <- feols(
+  total_revenue_totalrev_per_pupil_v33_district_finance ~
+    i(event_time, ref = -1) |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+summary(model_event_twfe)
+iplot(model_event_twfe)
+
+model_total_twfe_controls <- feols(
+  total_revenue_totalrev_per_pupil_v33_district_finance ~
+    treated + share_child_poverty |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+summary(model_total_twfe_controls)
+```
+
+# federal, state, local rev
+```{r}
+model_event_federal <- feols(
+  total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance ~
+    i(event_time, ref = -1) |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+summary(model_event_federal)
+iplot(model_event_federal)
+
+
+model_event_state <- feols(
+  total_revenue_state_sources_tstrev_per_pupil_v33_district_finance ~
+    i(event_time, ref = -1) |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+summary(model_event_state)
+iplot(model_event_state)
+
+
+model_event_local <- feols(
+  total_revenue_local_sources_tlocrev_per_pupil_v33_district_finance ~
+    i(event_time, ref = -1) |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+summary(model_event_local)
+iplot(model_event_local)
+
+
+
+
+
+etable(model_event_federal, model_event_state, model_event_local)
+
+cep <- cep %>%
+  mutate(event_time_bin = case_when(
+    event_time <= -4 ~ -4,
+    event_time >= 4 ~ 4,
+    TRUE ~ event_time
+  ))
+
+```
+
+

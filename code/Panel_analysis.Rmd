@@ -555,4 +555,53 @@ summary(s_overall)
 ```
 
 
+# Sun & Abraham
+## Total revenue
+```{r}
+model_sunab <- feols(
+  total_revenue_totalrev_per_pupil_v33_district_finance ~
+    sunab(first_treat_year, year) |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+summary(model_sunab)
+
+iplot(model_sunab, xlim = c(-5, 5))
+
+
+range(cep$year, na.rm = TRUE)
+sort(unique(cep$year))
+sort(unique(cep$first_treat_year))
+```
+
+## Federal revenue
+```{r}
+model_federal_sunab <- feols(
+  total_revenue_federal_sources_tfedrev_per_pupil_v33_district_finance ~
+    sunab(first_treat_year, year) |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+iplot(model_federal_sunab, xlim = c(-5,5))
+```
+
+## State revenue
+```{r}
+model_state_sunab <- feols(
+  total_revenue_state_sources_tstrev_per_pupil_v33_district_finance ~
+    sunab(first_treat_year, year) |
+    agency_name + year,
+  cluster = ~agency_name,
+  data = cep
+)
+
+iplot(model_state_sunab, xlim = c(-5,5))
+
+```
+
+
 
